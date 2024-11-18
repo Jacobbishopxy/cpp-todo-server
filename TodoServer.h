@@ -19,6 +19,7 @@ struct Todo
     bool completed;
 };
 
+// used for uWS::WebSocket type
 struct WsData
 {
     std::string_view user_secure_token;
@@ -28,6 +29,8 @@ class TodoServer : public uWS::App
 {
 public:
     TodoServer();
+
+    void startServer(int port);
 
     // HTTP API Endpoints
     void getTodo(uWS::HttpResponse<false>* res, uint todoId);
@@ -47,5 +50,7 @@ private:
     std::mutex todosMutex;                // Locks for async modification
     uWS::Loop* loop;                      // Loop for deferring tasks
 };
+
+using TodoServerPtr = std::shared_ptr<TodoServer>;
 
 #endif  //!__TODOSERVER__H__

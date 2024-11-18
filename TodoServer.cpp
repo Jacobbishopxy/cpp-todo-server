@@ -31,58 +31,56 @@ void from_json(const nlohmann::json& j, Todo& todo)
 TodoServer::TodoServer()
 {
     // acquire event loop
-    loop = uWS::Loop::get();
+    this->loop = uWS::Loop::get();
 
     // HTTP routes
-    get("/todos", [this](auto* res, auto* req)
-        { getAllTodos(res); });
+    this->get("/todos", [this](auto* res, auto* req)
+              { getAllTodos(res); });
 
-    get("/todo/:id", [this](auto* res, auto* req)
-        {
-            auto todoId = std::stoi(std::string(req->getParameter(0)));
-            getTodo(res, todoId);
+    this->get("/todo/:id", [this](auto* res, auto* req)
+              {
+                  auto todoId = std::stoi(std::string(req->getParameter(0)));
+                  getTodo(res, todoId);
+                  //
+              });
 
-            //
-        });
+    this->post("/todo", [this](auto* res, auto* req)
+               {
+                   auto isAborted = std::make_shared<bool>(false);
 
-    post("/todo", [this](auto* res, auto* req)
-         {
-             auto isAborted = std::make_shared<bool>(false);
+                   // Parse JSON body for new TODO details
+                   res->onData([this, res, isAborted](std::string_view data, bool last)
+                               {
+                                   nlohmann::json body = nlohmann::json::parse(data);
+                                   std::string description = body["description"];
+                                   bool completed = body["completed"];
 
-             // Parse JSON body for new TODO details
-             res->onData([this, res, isAborted](std::string_view data, bool last)
-                         {
-                             nlohmann::json body = nlohmann::json::parse(data);
-                             std::string description = body["description"];
-                             bool completed = body["completed"];
+                                   if (!*isAborted)
+                                   {
+                                       modifyTodo(res, nextTodoId++, description, completed);
+                                   }
+                                   //
+                               });
 
-                             if (!*isAborted)
-                             {
-                                 modifyTodo(res, nextTodoId++, description, completed);
-                             }
-                             //
-                         });
+                   res->onAborted([isAborted]()
+                                  { *isAborted = true; });
+                   //
+               });
 
-             res->onAborted([isAborted]()
-                            { *isAborted = true; });
-             //
-         });
+    this->del("/todo/:id", [this](auto* res, auto* req)
+              {
+                  auto todoId = std::stoi(std::string(req->getParameter(0)));
+                  deleteTodo(res, todoId);
+                  //
+              });
 
-    del("/todo/:id", [this](auto* res, auto* req)
-        {
-            auto todoId = std::stoi(std::string(req->getParameter(0)));
-            deleteTodo(res, todoId);
+    this->put("/todo/:id", [this](auto* res, auto* req)
+              {
+                  int todoId = std::stoi(std::string(req->getParameter(0)));
+                  auto isAborted = std::make_shared<bool>(false);
 
-            //
-        });
-
-    put("/todo/:id", [this](auto* res, auto* req)
-        {
-            int todoId = std::stoi(std::string(req->getParameter(0)));
-            auto isAborted = std::make_shared<bool>(false);
-
-            res->onData([this, res, todoId](std::string_view data, bool last)
-                        {
+                  res->onData([this, res, todoId](std::string_view data, bool last)
+                              {
             try {
                 nlohmann::json body = nlohmann::json::parse(data);
 
@@ -94,20 +92,38 @@ TodoServer::TodoServer()
                 res->writeStatus("400 Bad Request")->end("Invalid JSON payload");
             } });
 
-            res->onAborted([isAborted]()
-                           { *isAborted = true; });
-            //
-        });
+                  res->onAborted([isAborted]()
+                                 { *isAborted = true; });
+                  //
+              });
 
     // WebSocket route
-    ws<WsData>("/*", {
-                         .open = [this](auto* ws)
-                         { handleWebSocketConnection(ws); },
-                         .message = [this](auto* ws, std::string_view message, uWS::OpCode)
-                         { handleWebSocketMessage(ws, message); },
-                         .close = [this](auto* ws, int, std::string_view)
-                         { handleWebSocketClose(ws); },
-                     });
+    this->ws<WsData>("/*", {
+                               .open = [this](auto* ws)
+                               { handleWebSocketConnection(ws); },
+                               .message = [this](auto* ws, std::string_view message, uWS::OpCode)
+                               { handleWebSocketMessage(ws, message); },
+                               .close = [this](auto* ws, int, std::string_view)
+                               { handleWebSocketClose(ws); },
+                           });
+}
+
+void TodoServer::startServer(int port)
+{
+    std::cout << "Starting Todo server on port " << port << "..." << std::endl;
+
+    // Listen on the specified port
+    this->listen(port, [port](auto* token)
+                 {
+            if (token) {
+                std::cout << "Server listening on port " << port << "!" << std::endl;
+            } else {
+                std::cerr << "Failed to start server on port " << port << std::endl;
+                exit(EXIT_FAILURE);
+            } });
+
+    // Start the server
+    this->run();
 }
 
 // HTTP API Implementations
@@ -179,7 +195,7 @@ void TodoServer::getAllTodos(uWS::HttpResponse<false>* res)
 
 void TodoServer::handleWebSocketConnection(uWS::WebSocket<false, true, WsData>* ws)
 {
-    // ws->subscribe("broadcast");
+    // std::cout << "Connected: " << ws->getRemoteAddressAsText() << std::endl;
 }
 
 void TodoServer::handleWebSocketMessage(uWS::WebSocket<false, true, WsData>* ws, std::string_view message)
@@ -204,10 +220,18 @@ void TodoServer::handleWebSocketMessage(uWS::WebSocket<false, true, WsData>* ws,
         else if (request.contains("action") && request["action"] == "unsubscribe" && request.contains("topic"))
         {
             std::string topic = request["topic"];
-            // Subscribe the WebSocket client to the specified topic
+            // Unsubscribe the WebSocket client to the specified topic
             ws->unsubscribe(topic);
             // Acknowledge the subscription
             ws->send("Unsubscribed to topic: " + topic, uWS::OpCode::TEXT);
+        }
+        else if (request.contains("action") && request["action"] == "subscriptions")
+        {
+            nlohmann::json topics = nlohmann::json::array();
+            ws->iterateTopics([&topics, ws](std::string_view topic)
+                              { topics.push_back(topic); });
+            nlohmann::json topicsJson = topics;
+            ws->send("Subscribed topics: " + topicsJson.dump(), uWS::OpCode::TEXT);
         }
         else
         {
