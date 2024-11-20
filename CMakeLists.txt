@@ -34,5 +34,9 @@ include_directories("include")
 
 add_compile_options(-march=native -flto)
 
-add_executable(todo_server Main.cpp TodoServer.cpp)
+add_executable(todo_server Main.cpp TodoServer_new.cpp)
 target_link_libraries(todo_server ${LIB_UWEBSOCKETS} fmt::fmt)
+
+
+add_executable(test_main Main_hsy.cpp)
+target_link_libraries(test_main ${LIB_UWEBSOCKETS} fmt::fmt)
