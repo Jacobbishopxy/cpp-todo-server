@@ -8,6 +8,7 @@
 #ifndef __TODOSERVER__H__
 #define __TODOSERVER__H__
 
+#include <shared_mutex>
 #include <string>
 
 #include "uWebSockets/App.h"
@@ -19,18 +20,23 @@ struct Todo
     bool completed;
 };
 
+using Todos = std::shared_ptr<std::unordered_map<uint, Todo>>;
+using Apps = std::shared_ptr<std::unordered_map<uint, uWS::App>>;
+
+using TodoMutex = std::shared_mutex;
+
 // used for uWS::WebSocket type
 struct WsData
 {
     std::string_view user_secure_token;
 };
 
-class TodoServer : public uWS::App
+class TodoServer
 {
 public:
-    TodoServer();
+    TodoServer(Todos, TodoMutex&);
 
-    void startServer(int port);
+    void startServer(uint app_num, int port);
 
     // HTTP API Endpoints
     void getTodo(uWS::HttpResponse<false>* res, uint todoId);
@@ -45,10 +51,9 @@ public:
     void broadcastMessage(const std::string& topic, const std::string& message);
 
 private:
-    std::unordered_map<int, Todo> todos;  // In-memory store for TODOs
-    int nextTodoId = 1;                   // ID counter for new TODOs
-    std::mutex todosMutex;                // Locks for async modification
-    uWS::Loop* loop;                      // Loop for deferring tasks
+    Apps m_apps;
+    Todos m_todos;
+    TodoMutex& m_mutex;
 };
 
 using TodoServerPtr = std::shared_ptr<TodoServer>;

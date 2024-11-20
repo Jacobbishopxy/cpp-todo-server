@@ -28,93 +28,132 @@ void from_json(const nlohmann::json& j, Todo& todo)
     j.at("completed").get_to(todo.completed);
 }
 
-TodoServer::TodoServer()
+uint getMaxId(Todos todos)
 {
-    // acquire event loop
-    this->loop = uWS::Loop::get();
+    if (!todos || todos->empty())
+    {
+        return 0;  // Return 0 if the map is empty or null
+    }
 
-    // HTTP routes
-    this->get("/todos", [this](auto* res, auto* req)
-              { getAllTodos(res); });
-
-    this->get("/todo/:id", [this](auto* res, auto* req)
-              {
-                  auto todoId = std::stoi(std::string(req->getParameter(0)));
-                  getTodo(res, todoId);
-                  //
-              });
-
-    this->post("/todo", [this](auto* res, auto* req)
-               {
-                   auto isAborted = std::make_shared<bool>(false);
-
-                   // Parse JSON body for new TODO details
-                   res->onData([this, res, isAborted](std::string_view data, bool last)
-                               {
-                                   nlohmann::json body = nlohmann::json::parse(data);
-                                   std::string description = body["description"];
-                                   bool completed = body["completed"];
-
-                                   if (!*isAborted)
-                                   {
-                                       modifyTodo(res, nextTodoId++, description, completed);
-                                   }
-                                   //
-                               });
-
-                   res->onAborted([isAborted]()
-                                  { *isAborted = true; });
-                   //
-               });
-
-    this->del("/todo/:id", [this](auto* res, auto* req)
-              {
-                  auto todoId = std::stoi(std::string(req->getParameter(0)));
-                  deleteTodo(res, todoId);
-                  //
-              });
-
-    this->put("/todo/:id", [this](auto* res, auto* req)
-              {
-                  int todoId = std::stoi(std::string(req->getParameter(0)));
-                  auto isAborted = std::make_shared<bool>(false);
-
-                  res->onData([this, res, todoId](std::string_view data, bool last)
-                              {
-            try {
-                nlohmann::json body = nlohmann::json::parse(data);
-
-                std::string description = body.value("description", "");
-                bool completed = body.value("completed", false);
-
-                modifyTodo(res, todoId, description, completed);
-            } catch (const std::exception &e) {
-                res->writeStatus("400 Bad Request")->end("Invalid JSON payload");
-            } });
-
-                  res->onAborted([isAborted]()
-                                 { *isAborted = true; });
-                  //
-              });
-
-    // WebSocket route
-    this->ws<WsData>("/*", {
-                               .open = [this](auto* ws)
-                               { handleWebSocketConnection(ws); },
-                               .message = [this](auto* ws, std::string_view message, uWS::OpCode)
-                               { handleWebSocketMessage(ws, message); },
-                               .close = [this](auto* ws, int, std::string_view)
-                               { handleWebSocketClose(ws); },
-                           });
+    uint largestKey = 0;  // Start with the smallest integer
+    for (const auto& pair : *todos)
+    {
+        if (pair.first > largestKey)
+        {
+            largestKey = pair.first;
+        }
+    }
+    return largestKey;
 }
 
-void TodoServer::startServer(int port)
+auto getTid()
+{
+    std::stringstream ss;
+    auto tid = std::this_thread::get_id();
+    ss << tid;
+    return ss.str();
+}
+
+// ================================================================================================
+// Server
+// ================================================================================================
+#pragma region TodoServer
+
+TodoServer::TodoServer(Todos todos, TodoMutex& todo_mutex)
+    : m_todos(todos), m_mutex(todo_mutex)
+{
+    this->m_apps = std::make_shared<std::unordered_map<uint, uWS::App>>();
+}
+
+void TodoServer::startServer(uint app_num, int port)
 {
     std::cout << "Starting Todo server on port " << port << "..." << std::endl;
 
+    (*this->m_apps).insert({app_num, uWS::App()});
+
+    // HTTP routes
+    this->m_apps->at(app_num).get("/todos", [this](auto* res, auto* req)
+                                  { getAllTodos(res); });
+
+    this->m_apps->at(app_num).get("/todo/:id", [this](auto* res, auto* req)
+                                  {
+                                      auto todoId = std::stoi(std::string(req->getParameter(0)));
+                                      getTodo(res, todoId);
+                                      //
+                                  });
+
+    this->m_apps->at(app_num).post("/todo", [this](auto* res, auto* req)
+                                   {
+                                       auto isAborted = std::make_shared<bool>(false);
+
+                                       // Parse JSON body for new TODO details
+                                       res->onData([this, res, isAborted](std::string_view data, bool last)
+                                                   {
+                                                       nlohmann::json body = nlohmann::json::parse(data);
+                                                       std::string description = body["description"];
+                                                       bool completed = body["completed"];
+                                                       auto maxId = getMaxId(this->m_todos);
+                                                       auto newId = maxId + 1;
+
+                                                       if (!*isAborted)
+                                                       {
+                                                           modifyTodo(res, newId, description, completed);
+                                                       }
+                                                       //
+                                                   });
+
+                                       res->onAborted([isAborted]()
+                                                      { *isAborted = true; });
+                                       //
+                                   });
+
+    this->m_apps->at(app_num).del("/todo/:id", [this](auto* res, auto* req)
+                                  {
+                                      auto todoId = std::stoi(std::string(req->getParameter(0)));
+                                      deleteTodo(res, todoId);
+                                      //
+                                  });
+
+    this->m_apps->at(app_num).put("/todo/:id", [this](auto* res, auto* req)
+                                  {
+                                      int todoId = std::stoi(std::string(req->getParameter(0)));
+                                      auto isAborted = std::make_shared<bool>(false);
+
+                                      res->onData([this, res, todoId](std::string_view data, bool last)
+                                                  {
+                                                      try
+                                                      {
+                                                          nlohmann::json body = nlohmann::json::parse(data);
+                                                          std::string description = body.value("description", "");
+                                                          bool completed = body.value("completed", false);
+
+                                                          modifyTodo(res, todoId, description, completed);
+                                                      }
+                                                      catch (const std::exception& e)
+                                                      {
+                                                          res->writeStatus("400 Bad Request")->end("Invalid JSON payload");
+                                                      }
+                                                      //
+                                                  });
+
+                                      res->onAborted([isAborted]()
+                                                     { *isAborted = true; });
+                                      //
+                                  });
+
+    // WebSocket route
+    this->m_apps->at(app_num).ws<WsData>("/*", {
+                                                   .open = [this](auto* ws)
+                                                   { handleWebSocketConnection(ws); },
+                                                   .message = [this](auto* ws, std::string_view message, uWS::OpCode)
+                                                   { handleWebSocketMessage(ws, message); },
+                                                   .close = [this](auto* ws, int, std::string_view)
+                                                   { handleWebSocketClose(ws); },
+                                               });
+
     // Listen on the specified port
-    this->listen(port, [port](auto* token)
-                 {
+    this->m_apps->at(app_num).listen(port, [port](auto* token)
+                                     {
             if (token) {
                 std::cout << "Server listening on port " << port << "!" << std::endl;
             } else {
@@ -123,23 +162,26 @@ void TodoServer::startServer(int port)
             } });
 
     // Start the server
-    this->run();
+    this->m_apps->at(app_num).run();
 }
 
 // HTTP API Implementations
 
 void TodoServer::getTodo(uWS::HttpResponse<false>* res, uint todoId)
 {
+    std::shared_lock lock(this->m_mutex);
     std::string msg;
-    if (todos.find(todoId) != todos.end())
+    auto tid = getTid();
+
+    if (this->m_todos->find(todoId) != this->m_todos->end())
     {
-        nlohmann::json todoJson = todos[todoId];
-        msg = fmt::format("getTodo: {}", todoJson.dump());
+        nlohmann::json todoJson = this->m_todos->at(todoId);
+        msg = fmt::format("[{}] getTodo: {}", tid, todoJson.dump());
         res->end(msg);
     }
     else
     {
-        msg = fmt::format("getTodo failed: {}", todoId);
+        msg = fmt::format("[{}] getTodo failed: {}", tid, todoId);
         res->end(msg);
     }
     this->broadcastMessage("query", msg);
@@ -147,18 +189,21 @@ void TodoServer::getTodo(uWS::HttpResponse<false>* res, uint todoId)
 
 void TodoServer::deleteTodo(uWS::HttpResponse<false>* res, uint todoId)
 {
-    auto it = this->todos.find(todoId);
+    std::unique_lock lock(this->m_mutex);
+    auto it = this->m_todos->find(todoId);
+    auto tid = getTid();
     std::string msg;
-    if (it != this->todos.end())
+
+    if (it != this->m_todos->end())
     {
-        nlohmann::json t = todos[todoId];
-        msg = fmt::format("deleteTodo: {}", t.dump());
-        this->todos.erase(todoId);
+        nlohmann::json t = this->m_todos->at(todoId);
+        msg = fmt::format("[{}] deleteTodo: {}", tid, t.dump());
+        this->m_todos->erase(todoId);
         res->end(msg);
     }
     else
     {
-        msg = fmt::format("deleteTodo failed: {}", todoId);
+        msg = fmt::format("[{}] deleteTodo failed: {}", tid, todoId);
         res->end(msg);
     }
     this->broadcastMessage("mutation", msg);
@@ -166,9 +211,11 @@ void TodoServer::deleteTodo(uWS::HttpResponse<false>* res, uint todoId)
 
 void TodoServer::modifyTodo(uWS::HttpResponse<false>* res, uint todoId, const std::string& description, bool completed)
 {
-    todos[todoId] = Todo{todoId, description, completed};
-    nlohmann::json t = todos[todoId];
-    auto msg = fmt::format("modifyTodo: {}", t.dump());
+    std::unique_lock lock(this->m_mutex);
+    (*this->m_todos).insert({todoId, Todo{todoId, description, completed}});
+    auto tid = getTid();
+    nlohmann::json t = this->m_todos->at(todoId);
+    auto msg = fmt::format("[{}] modifyTodo: {}", tid, t.dump());
 
     res->end(msg);
     this->broadcastMessage("mutation", msg);
@@ -176,8 +223,9 @@ void TodoServer::modifyTodo(uWS::HttpResponse<false>* res, uint todoId, const st
 
 void TodoServer::getAllTodos(uWS::HttpResponse<false>* res)
 {
+    std::shared_lock lock(this->m_mutex);
     nlohmann::json allTodos = nlohmann::json::array();
-    for (const auto& [id, todo] : todos)
+    for (const auto& [id, todo] : *this->m_todos.get())
     {
         allTodos.push_back({
             {"id", todo.id},
@@ -185,7 +233,8 @@ void TodoServer::getAllTodos(uWS::HttpResponse<false>* res)
             {"completed", todo.completed},
         });
     }
-    auto msg = allTodos.dump();
+    auto tid = getTid();
+    auto msg = fmt::format("[{}] allTodos: {}", tid, allTodos.dump());
     res->end(msg);
     // broadcast to ws subscribers
     this->broadcastMessage("query", msg);
@@ -195,13 +244,18 @@ void TodoServer::getAllTodos(uWS::HttpResponse<false>* res)
 
 void TodoServer::handleWebSocketConnection(uWS::WebSocket<false, true, WsData>* ws)
 {
-    // std::cout << "Connected: " << ws->getRemoteAddressAsText() << std::endl;
+    auto tid = getTid();
+    auto msg = fmt::format("tid: {}", tid);
+    ws->send(msg, uWS::OpCode::TEXT);
 }
 
 void TodoServer::handleWebSocketMessage(uWS::WebSocket<false, true, WsData>* ws, std::string_view message)
 {
     // subscription payload:
-    // {"action": "subscribe": "topic": "xxx"}
+    // {"action": "subscribe", "topic": "xxx"}
+    // {"action": "unsubscribe", "topic": "xxx"}
+    // {"action": "subscriptions"}
+    // xxx: query/mutation/random
 
     try
     {
@@ -212,18 +266,40 @@ void TodoServer::handleWebSocketMessage(uWS::WebSocket<false, true, WsData>* ws,
         if (request.contains("action") && request["action"] == "subscribe" && request.contains("topic"))
         {
             std::string topic = request["topic"];
-            // Subscribe the WebSocket client to the specified topic
-            ws->subscribe(topic);
-            // Acknowledge the subscription
-            ws->send("Subscribed to topic: " + topic, uWS::OpCode::TEXT);
+            if (topic == "all")
+            {
+                ws->subscribe("query");
+                ws->subscribe("mutation");
+                ws->subscribe("random");
+
+                ws->send("Subscribed to all topics: query/mutation/random", uWS::OpCode::TEXT);
+            }
+            else
+            {
+                // Subscribe the WebSocket client to the specified topic
+                ws->subscribe(topic);
+                // Acknowledge the subscription
+                ws->send("Subscribed to topic: " + topic, uWS::OpCode::TEXT);
+            }
         }
         else if (request.contains("action") && request["action"] == "unsubscribe" && request.contains("topic"))
         {
             std::string topic = request["topic"];
-            // Unsubscribe the WebSocket client to the specified topic
-            ws->unsubscribe(topic);
-            // Acknowledge the subscription
-            ws->send("Unsubscribed to topic: " + topic, uWS::OpCode::TEXT);
+            if (topic == "all")
+            {
+                ws->unsubscribe("query");
+                ws->unsubscribe("mutation");
+                ws->unsubscribe("random");
+
+                ws->send("Unsubscribed to all topics: query/mutation/random", uWS::OpCode::TEXT);
+            }
+            else
+            {
+                // Unsubscribe the WebSocket client to the specified topic
+                ws->unsubscribe(topic);
+                // Acknowledge the subscription
+                ws->send("Unsubscribed to topic: " + topic, uWS::OpCode::TEXT);
+            }
         }
         else if (request.contains("action") && request["action"] == "subscriptions")
         {
@@ -254,6 +330,8 @@ void TodoServer::handleWebSocketClose(uWS::WebSocket<false, true, WsData>* ws)
 // Broadcast to all WebSocket clients
 void TodoServer::broadcastMessage(const std::string& topic, const std::string& message)
 {
-    this->loop->defer([this, topic, message]()
-                      { publish(topic, message, uWS::OpCode::TEXT); });
+    for (auto& pair : *this->m_apps)
+        pair.second.publish(topic, message, uWS::OpCode::TEXT);
 }
+
+#pragma endregion TodoServer
