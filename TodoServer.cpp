@@ -75,71 +75,104 @@ void TodoServer::startServer(uint app_num, int port)
     this->m_apps->at(app_num).get("/todos", [this](auto* res, auto* req)
                                   { getAllTodos(res); });
 
-    this->m_apps->at(app_num).get("/todo/:id", [this](auto* res, auto* req)
-                                  {
-                                      auto todoId = std::stoi(std::string(req->getParameter(0)));
-                                      getTodo(res, todoId);
-                                      //
-                                  });
+    // ================================================================================================
+    // get_todo
+    // ================================================================================================
+    auto get_todo = [this](auto* res, auto* req)
+    {
+        auto todoId = std::stoi(std::string(req->getParameter(0)));
+        getTodo(res, todoId);
+    };
+    this->m_apps->at(app_num).get("/todo/:id", get_todo);
 
-    this->m_apps->at(app_num).post("/todo", [this](auto* res, auto* req)
-                                   {
-                                       auto isAborted = std::make_shared<bool>(false);
+    // ================================================================================================
+    // create_todo
+    // ================================================================================================
+    auto create_dodo = [this](auto* res, auto* req)
+    {
+        auto isAborted = std::make_shared<bool>(false);
+        std::string buffer;
+        auto onData = [this,
+                       res,
+                       isAborted,
+                       buffer = std::move(buffer)](std::string_view data, bool last) mutable
+        {
+            buffer.append(data.data(), data.length());
+            if (last)
+            {
+                try
+                {
+                    // Parse JSON body for new TODO details
+                    nlohmann::json body = nlohmann::json::parse(buffer);
+                    std::string description = body["description"];
+                    bool completed = body["completed"];
+                    auto maxId = getMaxId(this->m_todos);
+                    auto newId = maxId + 1;
 
-                                       // Parse JSON body for new TODO details
-                                       res->onData([this, res, isAborted](std::string_view data, bool last)
-                                                   {
-                                                       nlohmann::json body = nlohmann::json::parse(data);
-                                                       std::string description = body["description"];
-                                                       bool completed = body["completed"];
-                                                       auto maxId = getMaxId(this->m_todos);
-                                                       auto newId = maxId + 1;
+                    if (!*isAborted)
+                        modifyTodo(res, newId, description, completed);
+                }
+                catch (const std::exception& e)
+                {
+                    res->writeStatus("400 Bad Request")->end("Invalid JSON payload");
+                }
+            }
+        };
 
-                                                       if (!*isAborted)
-                                                       {
-                                                           modifyTodo(res, newId, description, completed);
-                                                       }
-                                                       //
-                                                   });
+        res->onData(onData);
+        res->onAborted([isAborted]()
+                       { *isAborted = true; });
+    };
+    this->m_apps->at(app_num).post("/todo", create_dodo);
 
-                                       res->onAborted([isAborted]()
-                                                      { *isAborted = true; });
-                                       //
-                                   });
+    // ================================================================================================
+    // delete_todo
+    // ================================================================================================
+    auto delete_todo = [this](auto* res, auto* req)
+    {
+        auto todoId = std::stoi(std::string(req->getParameter(0)));
+        deleteTodo(res, todoId);
+    };
+    this->m_apps->at(app_num).del("/todo/:id", delete_todo);
 
-    this->m_apps->at(app_num).del("/todo/:id", [this](auto* res, auto* req)
-                                  {
-                                      auto todoId = std::stoi(std::string(req->getParameter(0)));
-                                      deleteTodo(res, todoId);
-                                      //
-                                  });
+    // ================================================================================================
+    // modify_todo
+    // ================================================================================================
+    auto modify_todo = [this](auto* res, auto* req)
+    {
+        int todoId = std::stoi(std::string(req->getParameter(0)));
+        auto isAborted = std::make_shared<bool>(false);
+        std::string buffer;
 
-    this->m_apps->at(app_num).put("/todo/:id", [this](auto* res, auto* req)
-                                  {
-                                      int todoId = std::stoi(std::string(req->getParameter(0)));
-                                      auto isAborted = std::make_shared<bool>(false);
+        auto onData = [this,
+                       res,
+                       isAborted,
+                       todoId,
+                       buffer = std::move(buffer)](std::string_view data, bool last) mutable
+        {
+            buffer.append(data.data(), data.length());
+            if (last)
+            {
+                try
+                {
+                    nlohmann::json body = nlohmann::json::parse(buffer);
+                    std::string description = body.value("description", "");
+                    bool completed = body.value("completed", false);
 
-                                      res->onData([this, res, todoId](std::string_view data, bool last)
-                                                  {
-                                                      try
-                                                      {
-                                                          nlohmann::json body = nlohmann::json::parse(data);
-                                                          std::string description = body.value("description", "");
-                                                          bool completed = body.value("completed", false);
-
-                                                          modifyTodo(res, todoId, description, completed);
-                                                      }
-                                                      catch (const std::exception& e)
-                                                      {
-                                                          res->writeStatus("400 Bad Request")->end("Invalid JSON payload");
-                                                      }
-                                                      //
-                                                  });
-
-                                      res->onAborted([isAborted]()
-                                                     { *isAborted = true; });
-                                      //
-                                  });
+                    if (!*isAborted)
+                        modifyTodo(res, todoId, description, completed);
+                }
+                catch (const std::exception& e)
+                {
+                    res->writeStatus("400 Bad Request")->end("Invalid JSON payload");
+                }
+            }
+        };
+        res->onData(onData);
+        res->onAborted([isAborted]()
+                       { *isAborted = true; });
+    };
+    this->m_apps->at(app_num).put("/todo/:id", modify_todo);
 
     // WebSocket route
     this->m_apps->at(app_num).ws<WsData>("/*", {
