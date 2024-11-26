@@ -174,7 +174,9 @@ void TodoServer::startServer(uint app_num, int port)
     };
     this->m_apps->at(app_num).put("/todo/:id", modify_todo);
 
+    // ================================================================================================
     // WebSocket route
+    // ================================================================================================
     this->m_apps->at(app_num).ws<WsData>("/*", {
                                                    .open = [this](auto* ws)
                                                    { handleWebSocketConnection(ws); },
@@ -184,15 +186,23 @@ void TodoServer::startServer(uint app_num, int port)
                                                    { handleWebSocketClose(ws); },
                                                });
 
+    // ================================================================================================
+    // Run
+    // ================================================================================================
+    auto listen = [port](auto* token)
+    {
+        if (token)
+        {
+            std::cout << "Server listening on port " << port << "!" << std::endl;
+        }
+        else
+        {
+            std::cerr << "Failed to start server on port " << port << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    };
     // Listen on the specified port
-    this->m_apps->at(app_num).listen(port, [port](auto* token)
-                                     {
-            if (token) {
-                std::cout << "Server listening on port " << port << "!" << std::endl;
-            } else {
-                std::cerr << "Failed to start server on port " << port << std::endl;
-                exit(EXIT_FAILURE);
-            } });
+    this->m_apps->at(app_num).listen(port, listen);
 
     // Start the server
     this->m_apps->at(app_num).run();
