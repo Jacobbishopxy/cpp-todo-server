@@ -298,7 +298,7 @@ void TodoServer::handleWebSocketMessage(uWS::WebSocket<false, true, WsData>* ws,
     // {"action": "subscribe", "topic": "xxx"}
     // {"action": "unsubscribe", "topic": "xxx"}
     // {"action": "subscriptions"}
-    // xxx: query/mutation/random
+    // xxx: all/query/mutation/random
 
     try
     {
@@ -374,7 +374,14 @@ void TodoServer::handleWebSocketClose(uWS::WebSocket<false, true, WsData>* ws)
 void TodoServer::broadcastMessage(const std::string& topic, const std::string& message)
 {
     for (auto& pair : *this->m_apps)
-        pair.second.publish(topic, message, uWS::OpCode::TEXT);
+    {
+        auto loop = pair.second.getLoop();
+        auto defer = [this, message, topic, &pair]()
+        {
+            pair.second.publish(topic, message, uWS::OpCode::TEXT);
+        };
+        loop->defer(defer);
+    }
 }
 
 #pragma endregion TodoServer

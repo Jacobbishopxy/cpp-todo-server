@@ -13,8 +13,27 @@
 
 void mockServer(TodoServerPtr todoServer);
 
-int main()
+int main(int argc, char* argv[])
 {
+    int workers = 1;  // Default workers set to 1
+
+    // Check command-line arguments
+    for (int i = 1; i < argc; ++i)
+    {
+        std::string arg = argv[i];
+
+        // Check for --workers argument
+        if (arg == "--workers" && (i + 1) < argc)
+        {
+            // Convert the next argument to an integer
+            workers = std::stoi(argv[i + 1]);
+            ++i;  // Skip the next argument since it's already processed
+        }
+    }
+
+    // Output the number of workers
+    std::cout << "Number of workers: " << workers << std::endl;
+
     try
     {
         auto todos = std::make_shared<std::unordered_map<uint, Todo>>();
@@ -24,15 +43,12 @@ int main()
         // singleton
         auto todo_server = std::make_shared<TodoServer>(TodoServer(todos, todo_mutex));
 
-        // thread 1 (init uWS::App)
-        std::thread todo_server_t1([todo_server, port]()
-                                   { todo_server->startServer(1, port); });
-        todo_server_t1.detach();
-
-        // thread 2 (init uWS::App)
-        std::thread todo_server_t2([todo_server, port]()
-                                   { todo_server->startServer(2, port); });
-        todo_server_t2.detach();
+        for (uint i = 1; i <= workers; ++i)
+        {
+            std::thread todo_server_t([i, todo_server, port]()
+                                      { todo_server->startServer(i, port); });
+            todo_server_t.detach();
+        }
 
         // mock server thread
         std::thread mock_server_t(mockServer, todo_server);
