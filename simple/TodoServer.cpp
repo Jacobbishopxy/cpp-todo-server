@@ -9,7 +9,7 @@
 
 #include <fmt/core.h>
 
-#include "include/json.hpp"
+#include "json.hpp"
 
 // JSON encoding and decoding functions for Todo
 void to_json(nlohmann::json& j, const Todo& todo)

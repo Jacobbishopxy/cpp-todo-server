@@ -20,18 +20,18 @@ include_directories("${UWEBSOCKETS_ROOT}/include")
 link_directories("${UWEBSOCKETS_ROOT}/lib")
 set(LIB_UWEBSOCKETS uSockets z)
 
+# spdlog
+set(SPDLOG_VERSION 1.15.0)
+set(SPDLOG_ROOT "/opt/qi-deps/spdlog-${SPDLOG_VERSION}")
+message("Using ${SPDLOG_ROOT}")
+include_directories("${SPDLOG_ROOT}/include")
+link_directories("${SPDLOG_ROOT}/lib")
+
 # fmt
 # `apt install libfmt-dev`
 find_package(fmt REQUIRED)
 
 include_directories("include")
 
-# ================================================================================================
-# exec
-# ================================================================================================
+add_subdirectory("simple")
 
-add_compile_options(-march=native -flto)
-add_executable(todo_server Main.cpp TodoServer.cpp)
-target_link_libraries(todo_server ${LIB_UWEBSOCKETS} fmt::fmt)
-
-add_executable(map_promise dev/MapPromiseTest.cpp)
