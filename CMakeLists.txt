@@ -4,8 +4,8 @@ project(cpp_todo_server)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_C_COMPILER "/usr/bin/gcc-12")
-set(CMAKE_CXX_COMPILER "/usr/bin/g++-12")
+# set(CMAKE_C_COMPILER "/usr/bin/gcc-12")
+# set(CMAKE_CXX_COMPILER "/usr/bin/g++-12")
 
 
 # ================================================================================================

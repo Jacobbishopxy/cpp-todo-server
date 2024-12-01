@@ -7,7 +7,7 @@
 
 #include "TodoServer.h"
 
-#include <fmt/core.h>
+#include <format>
 
 #include "json.hpp"
 
@@ -72,8 +72,11 @@ void TodoServer::startServer(uint app_num, int port)
     (*this->m_apps).insert({app_num, uWS::App()});
 
     // HTTP routes
-    this->m_apps->at(app_num).get("/todos", [this](auto* res, auto* req)
-                                  { getAllTodos(res); });
+    auto get_all = [this](auto* res, auto* req)
+    {
+        getAllTodos(res);
+    };
+    this->m_apps->at(app_num).get("/todos", get_all);
 
     // ================================================================================================
     // get_todo
@@ -219,12 +222,12 @@ void TodoServer::getTodo(uWS::HttpResponse<false>* res, uint todoId)
     if (this->m_todos->find(todoId) != this->m_todos->end())
     {
         nlohmann::json todoJson = this->m_todos->at(todoId);
-        msg = fmt::format("[{}] getTodo: {}", tid, todoJson.dump());
+        msg = std::format("[{}] getTodo: {}", tid, todoJson.dump());
         res->end(msg);
     }
     else
     {
-        msg = fmt::format("[{}] getTodo failed: {}", tid, todoId);
+        msg = std::format("[{}] getTodo failed: {}", tid, todoId);
         res->end(msg);
     }
     this->broadcastMessage("query", msg);
@@ -240,13 +243,13 @@ void TodoServer::deleteTodo(uWS::HttpResponse<false>* res, uint todoId)
     if (it != this->m_todos->end())
     {
         nlohmann::json t = this->m_todos->at(todoId);
-        msg = fmt::format("[{}] deleteTodo: {}", tid, t.dump());
+        msg = std::format("[{}] deleteTodo: {}", tid, t.dump());
         this->m_todos->erase(todoId);
         res->end(msg);
     }
     else
     {
-        msg = fmt::format("[{}] deleteTodo failed: {}", tid, todoId);
+        msg = std::format("[{}] deleteTodo failed: {}", tid, todoId);
         res->end(msg);
     }
     this->broadcastMessage("mutation", msg);
@@ -258,7 +261,7 @@ void TodoServer::modifyTodo(uWS::HttpResponse<false>* res, uint todoId, const st
     (*this->m_todos).insert({todoId, Todo{todoId, description, completed}});
     auto tid = getTid();
     nlohmann::json t = this->m_todos->at(todoId);
-    auto msg = fmt::format("[{}] modifyTodo: {}", tid, t.dump());
+    auto msg = std::format("[{}] modifyTodo: {}", tid, t.dump());
 
     res->end(msg);
     this->broadcastMessage("mutation", msg);
@@ -277,7 +280,7 @@ void TodoServer::getAllTodos(uWS::HttpResponse<false>* res)
         });
     }
     auto tid = getTid();
-    auto msg = fmt::format("[{}] allTodos: {}", tid, allTodos.dump());
+    auto msg = std::format("[{}] allTodos: {}", tid, allTodos.dump());
     res->end(msg);
     // broadcast to ws subscribers
     this->broadcastMessage("query", msg);
@@ -288,7 +291,7 @@ void TodoServer::getAllTodos(uWS::HttpResponse<false>* res)
 void TodoServer::handleWebSocketConnection(uWS::WebSocket<false, true, WsData>* ws)
 {
     auto tid = getTid();
-    auto msg = fmt::format("tid: {}", tid);
+    auto msg = std::format("tid: {}", tid);
     ws->send(msg, uWS::OpCode::TEXT);
 }
 
@@ -347,8 +350,11 @@ void TodoServer::handleWebSocketMessage(uWS::WebSocket<false, true, WsData>* ws,
         else if (request.contains("action") && request["action"] == "subscriptions")
         {
             nlohmann::json topics = nlohmann::json::array();
-            ws->iterateTopics([&topics, ws](std::string_view topic)
-                              { topics.push_back(topic); });
+            auto iter_topics = [&topics, ws](std::string_view topic)
+            {
+                topics.push_back(topic);
+            };
+            ws->iterateTopics(iter_topics);
             nlohmann::json topicsJson = topics;
             ws->send("Subscribed topics: " + topicsJson.dump(), uWS::OpCode::TEXT);
         }
