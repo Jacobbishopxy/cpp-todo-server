@@ -21,3 +21,5 @@ deploy/input
 /cmake-build-*/
 *.a
 *.dll
+
+.env
