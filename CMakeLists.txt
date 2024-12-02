@@ -34,4 +34,5 @@ find_package(fmt REQUIRED)
 include_directories("include")
 
 add_subdirectory("simple")
+add_subdirectory("complex")
 

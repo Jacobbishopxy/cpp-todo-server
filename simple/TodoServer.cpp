@@ -69,9 +69,12 @@ void TodoServer::startServer(uint app_num, int port)
 {
     std::cout << "Starting Todo server on port " << port << "..." << std::endl;
 
-    (*this->m_apps).insert({app_num, uWS::App()});
+    this->m_apps->insert({app_num, uWS::App()});
 
     // HTTP routes
+    // ================================================================================================
+    // get_all_todos
+    // ================================================================================================
     auto get_all = [this](auto* res, auto* req)
     {
         getAllTodos(res);
@@ -91,7 +94,7 @@ void TodoServer::startServer(uint app_num, int port)
     // ================================================================================================
     // create_todo
     // ================================================================================================
-    auto create_dodo = [this](auto* res, auto* req)
+    auto create_todo = [this](auto* res, auto* req)
     {
         auto isAborted = std::make_shared<bool>(false);
         std::string buffer;
@@ -126,7 +129,7 @@ void TodoServer::startServer(uint app_num, int port)
         res->onAborted([isAborted]()
                        { *isAborted = true; });
     };
-    this->m_apps->at(app_num).post("/todo", create_dodo);
+    this->m_apps->at(app_num).post("/todo", create_todo);
 
     // ================================================================================================
     // delete_todo
