@@ -22,8 +22,29 @@ struct Todo
     bool completed;
 };
 
-void to_json(nlohmann::json& j, const Todo& d);
-void from_json(const nlohmann::json& j, Todo& d);
+inline void to_json(nlohmann::json& j, const Todo& d)
+{
+    j = nlohmann::json{
+        {"id", d.id},
+        {"description", d.description},
+        {"completed", d.completed},
+    };
+}
+
+inline void from_json(const nlohmann::json& j, Todo& d)
+{
+    try
+    {
+        j.at("id").get_to(d.id);
+        j.at("description").get_to(d.description);
+        j.at("completed").get_to(d.completed);
+    }
+    catch (nlohmann::json::exception& e)
+    {
+        std::cerr << "JSON parsing error in Todo: " << e.what() << '\n';
+        throw e;
+    }
+}
 
 using Todos = std::shared_ptr<std::unordered_map<uint, Todo>>;
 using Apps = std::shared_ptr<std::unordered_map<uint, uWS::App>>;

@@ -82,10 +82,6 @@ public:
         std::cout << "Starting Todo server on port " << port << "...\n" << std::endl;
 
         // init uWS app
-        // std::cout << __FUNCTION__ << ":" << __LINE__ << std::endl;
-        // std::cout << __FUNCTION__ << " running on address: " << this << std::endl;
-        // std::cout << __FUNCTION__ << " type: " << typeid(this).name() << std::endl;
-        // std::cout << __FUNCTION__ << " m_apps on address: " << this->m_apps.get() << std::endl;
         this->m_apps->insert({app_num, uWS::App()});
 
         std::cout << "insert app_num: " << app_num << ", size: " << this->m_apps->size() << std::endl;
