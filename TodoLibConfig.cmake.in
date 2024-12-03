@@ -1,0 +1,12 @@
+# @file:	TodoLibConfig.cmake.in
+# @author:	Jacob Xie
+# @date:	2024/12/03 11:09:08 Tuesday
+# @brief:
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/TodoLibTargets.cmake")
+
+# Add any additional configuration or dependencies here

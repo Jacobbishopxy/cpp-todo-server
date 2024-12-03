@@ -1,3 +1,9 @@
+# @file:	CMakeLists.txt
+# @author:	Jacob Xie
+# @date:	2024/12/03 11:09:08 Tuesday
+# @brief:
+
+
 cmake_minimum_required(VERSION 3.7)
 project(cpp_todo_server)
 
@@ -31,7 +37,74 @@ link_directories("${SPDLOG_ROOT}/lib")
 # `apt install libfmt-dev`
 find_package(fmt REQUIRED)
 
-include_directories("include")
+
+# ================================================================================================
+# lib
+# ================================================================================================
+
+# Install header files
+install(DIRECTORY library/include/ DESTINATION include)
+
+# Specify the static libraries
+set(LIBS_DIR ${PROJECT_SOURCE_DIR}/library/lib)
+
+# Install libs
+install(
+    FILES
+    ${LIBS_DIR}/libfmt.so
+    ${LIBS_DIR}/libuSockets.a
+    ${LIBS_DIR}/libz.a
+    DESTINATION lib
+)
+
+# Find the static libraries
+# - uSockets
+add_library(uSockets STATIC IMPORTED)
+set_target_properties(uSockets PROPERTIES IMPORTED_LOCATION ${LIBS_DIR}/libuSockets.a)
+# - z
+add_library(z STATIC IMPORTED)
+set_target_properties(z PROPERTIES IMPORTED_LOCATION ${LIBS_DIR}/libz.a)
+# - fmt
+add_library(fmt STATIC IMPORTED)
+set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${LIBS_DIR}/libfmt.so)
+
+# Optionally, you can create an interface target
+add_library(todo_lib INTERFACE)
+target_link_libraries(todo_lib INTERFACE fmt uSockets z)
+
+# Installation rules
+install(
+    TARGETS todo_lib
+    EXPORT TodoLibTargets
+    INCLUDES DESTINATION include
+)
+
+# Export the package for use in other projects
+install(
+    EXPORT TodoLibTargets
+    FILE TodoLibTargets.cmake
+    NAMESPACE TodoLib::
+    DESTINATION lib/cmake/TodoLib
+)
+
+# Create a config file for the package
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    TodoLibConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/TodoLibConfig.cmake"
+    INSTALL_DESTINATION lib/cmake/TodoLib
+)
+
+install(
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/TodoLibConfig.cmake"
+    DESTINATION lib/cmake/TodoLib
+)
+
+# ================================================================================================
+# exec
+# ================================================================================================
+
+include_directories(${PROJECT_SOURCE_DIR}/include)
 
 add_subdirectory("simple")
 add_subdirectory("complex")
