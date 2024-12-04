@@ -31,25 +31,25 @@ public:
     Builder(Builder&&) noexcept = default;
     Builder& operator=(Builder&&) noexcept = default;
 
-    // 禁用拷贝
+    // disallow copy
     Builder(const Builder&) = delete;
     Builder& operator=(const Builder&) = delete;
 
-    // 注册 SpiType 实例
+    // register SpiType instance
     BuilderPatternReturnType&& registerApp(SpiType& spi)
     {
         m_spi_ptr = &spi;
         return std::move(static_cast<BuilderPatternReturnType&&>(*this));
     }
 
-    // SPI 指针的 get 方法
+    // SPI point get method
     [[nodiscard]] SpiType* getSpiPtr() const noexcept
     {
         return m_spi_ptr;
     }
 
 private:
-    SpiType* m_spi_ptr = nullptr;  // SPI 接口的指针
+    SpiType* m_spi_ptr = nullptr;  // SPI interface pointer
 };
 
 #pragma endregion Builder
@@ -79,7 +79,8 @@ public:
     void startServer(uint app_num, int port)
     {
         printInfo();
-        std::cout << "Starting Todo server on port " << port << "...\n" << std::endl;
+        std::cout << "Starting Todo server on port " << port << "...\n"
+                  << std::endl;
 
         // init uWS app
         this->m_apps->insert({app_num, uWS::App()});

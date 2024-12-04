@@ -2,5 +2,5 @@
 lib/*
 !lib/.gitkeep
 
-include/uwebsockets/*
-!include/uwebsockets/.gitkeep
+include/uWebSockets/*
+!include/uWebSockets/.gitkeep
