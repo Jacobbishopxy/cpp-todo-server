@@ -18,9 +18,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # deps
 # ================================================================================================
 
+# json
+set(JSON_VERSION 3.11.3)
+set(JSON_ROOT "/opt/qi-deps/json-${JSON_VERSION}")
+message("Using ${JSON_ROOT}")
+include_directories("${JSON_ROOT}/include")
+
 # uwebsockets
-set(UWEBSOCKETS_VERSION 20.66.0)
-set(UWEBSOCKETS_ROOT "/opt/qi-deps/uwebsockets-${UWEBSOCKETS_VERSION}")
+set(UWEBSOCKETS_VERSION 20.71.0)
+set(UWEBSOCKETS_ROOT "/opt/qi-deps/uWebSockets-${UWEBSOCKETS_VERSION}")
 message("Using ${UWEBSOCKETS_ROOT}")
 include_directories("${UWEBSOCKETS_ROOT}/include")
 link_directories("${UWEBSOCKETS_ROOT}/lib")
@@ -57,13 +63,15 @@ install(
     DESTINATION lib
 )
 
-# Find the static libraries
+
 # - uSockets
 add_library(uSockets STATIC IMPORTED)
 set_target_properties(uSockets PROPERTIES IMPORTED_LOCATION ${LIBS_DIR}/libuSockets.a)
+
 # - z
 add_library(z STATIC IMPORTED)
 set_target_properties(z PROPERTIES IMPORTED_LOCATION ${LIBS_DIR}/libz.a)
+
 # - fmt
 add_library(fmt STATIC IMPORTED)
 set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${LIBS_DIR}/libfmt.so)

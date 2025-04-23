@@ -8,10 +8,10 @@
 #ifndef __TODOSERVER__H__
 #define __TODOSERVER__H__
 
+#include <uWebSockets/App.h>
+
 #include <shared_mutex>
 #include <string>
-
-#include "App.h"
 
 struct Todo
 {
